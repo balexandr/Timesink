@@ -1,98 +1,171 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useRef, useState } from "react";
+import { ActivityIndicator, Dimensions, FlatList, Image, StyleSheet, Text, View, ViewToken } from "react-native";
+import { FeedItem } from "../lib/feed";
+import { useFeedPrefetch } from "../lib/useFeedPrefetch";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const PLACEHOLDER = require("./assets/history_placeholder.png");
+const { width, height } = Dimensions.get("window");
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
+export default function IndexScreen() {
+  const { feed, loading, loadMore, queueSize } = useFeedPrefetch({
+    initialCount: 5,
+    prefetchCount: 10,
+    queueMinSize: 15,
+    prefetchInterval: 3000,
+  });
+
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+
+  const handleLoadMore = useCallback(async () => {
+    setIsLoadingMore(true);
+    await loadMore();
+    // Small delay to show the indicator
+    setTimeout(() => setIsLoadingMore(false), 300);
+  }, [loadMore]);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0) {
+      const lastVisibleIndex = viewableItems[viewableItems.length - 1].index;
+      const currentFeedLength = feedRef.current.length;
+      
+      if (lastVisibleIndex !== null && lastVisibleIndex >= currentFeedLength - 3) {
+        console.log(`👀 Near end (index ${lastVisibleIndex}/${currentFeedLength}), loading more`);
+        handleLoadMore();
+      }
+    }
+  }, [handleLoadMore]);
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
+  const renderItem = useCallback(({ item }: { item: FeedItem }) => {
+    const isPlaceholder = !item.imageUri;
+
+    return (
+      <View style={styles.card}>
         <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+          source={isPlaceholder ? PLACEHOLDER : { uri: item.imageUri }}
+          defaultSource={PLACEHOLDER}
+          style={styles.image}
+          resizeMode="cover"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+        <View style={[styles.overlay, isPlaceholder && styles.overlayCenter]}>
+          <View style={styles.textBackground}>
+            {item.year ? <Text style={styles.year}>{item.year}</Text> : null}
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.source}>{item.source}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }, []);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const renderFooter = useCallback(() => {
+    if (!isLoadingMore && queueSize === 0) return null;
+    
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.footerText}>
+          {queueSize > 0 ? `Loading more... (${queueSize} ready)` : "Loading..."}
+        </Text>
+      </View>
+    );
+  }, [isLoadingMore, queueSize]);
+
+  if (loading && feed.length === 0) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#fff" />
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={feed}
+      keyExtractor={(item) => item.id}
+      pagingEnabled
+      showsVerticalScrollIndicator={false}
+      renderItem={renderItem}
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig}
+      onEndReached={handleLoadMore}
+      onEndReachedThreshold={0.5}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={3}
+      windowSize={7}
+      initialNumToRender={3}
+      ListFooterComponent={renderFooter}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  card: {
+    width,
+    height,
+    backgroundColor: "#000",
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
+  image: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#000",
+  },
+  overlay: {
+    position: "absolute",
+    bottom: 80,
+    paddingHorizontal: 20,
+  },
+  overlayCenter: {
     bottom: 0,
-    left: 0,
-    position: 'absolute',
+    top: 0,
+    justifyContent: "center",
+  },
+  textBackground: {
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 12,
+    borderRadius: 8,
+  },
+  year: {
+    color: "#fff",
+    fontSize: 14,
+    opacity: 0.9,
+    marginBottom: 6,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  source: {
+    color: "#fff",
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+  footer: {
+    height,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+  },
+  footerText: {
+    color: "#fff",
+    marginTop: 12,
+    fontSize: 14,
+    opacity: 0.7,
   },
 });

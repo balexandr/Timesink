@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Dimensions, FlatList, Image, StyleSheet, Text, View, ViewToken } from "react-native";
+import { ActivityIndicator, Dimensions, FlatList, Image, Linking, StyleSheet, Text, TouchableOpacity, View, ViewToken } from "react-native";
 import { FeedItem } from "../lib/feed";
 import { useFeedPrefetch } from "../lib/useFeedPrefetch";
 
@@ -59,6 +59,18 @@ export default function IndexScreen() {
             <Text style={styles.source}>{item.source}</Text>
           </View>
         </View>
+        {item.unsplashAttribution && (
+          <TouchableOpacity
+            style={styles.attribution}
+            onPress={() => Linking.openURL(item.unsplashAttribution!.photographerUrl)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.attributionText}>
+              Photo by <Text style={styles.attributionLink}>{item.unsplashAttribution.photographerName}</Text> on{" "}
+              <Text style={styles.attributionLink}>Unsplash</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }, []);
@@ -155,6 +167,24 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 8,
     fontStyle: "italic",
+  },
+  attribution: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  attributionText: {
+    color: "#fff",
+    fontSize: 10,
+    opacity: 0.9,
+  },
+  attributionLink: {
+    textDecorationLine: "underline",
+    fontWeight: "600",
   },
   footer: {
     height,

@@ -36,7 +36,7 @@ export async function generateFeed(
     if (!raw) continue;
 
     const title = rewriteFact(raw.text, raw.year);
-    const imageUri = unsplashDisabled ? "" : await fetchUnsplashImage(title);
+    const imageData = unsplashDisabled ? { uri: "" } : await fetchUnsplashImage(title);
 
     items.push({
       id: generateId(),
@@ -44,7 +44,8 @@ export async function generateFeed(
       title,
       fact: raw.text,
       source: raw.source,
-      imageUri,
+      imageUri: imageData.uri,
+      unsplashAttribution: imageData.attribution,
     });
   }
 
